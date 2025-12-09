@@ -44,7 +44,7 @@ channels:
   - biobakery
 dependencies:
   - python=3.12
-  - metaphlan=4.2.4
+  - metaphlan=4.1
   - humann=4.0.0a1
   - kneaddata=0.12
   - procps-ng
