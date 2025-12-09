@@ -5,14 +5,14 @@ by Kevin Bonham and Danielle Pinto
 **TOC**
 
 1. [Setup](#setup)
-  - [Software](#software)
-  - [Databases](#databases)
-  - [Workflow](#workflow)
-2. [Running the workflow]
-  - Setting parameters
-  - Setting options
-  - Running
-3. Outputs
+  1. [Software](#software)
+  1. [Databases](#databases)
+  1. [Workflow](#workflow)
+1. [Running the workflow](#running-the-workflow)
+  1. Setting parameters
+  1. Setting options
+  1. Running
+1. Outputs
 
 ## Setup
 
@@ -28,11 +28,50 @@ But installing the right software and databases can be a bit tricky.
 
 ### Software
 
-For convenience, we've created a docker container
-with all of the necessary software.
-Checkout https://github.com/bonhamlab/biobakery-containers
-for more info and some `environment.yaml` files
-that you can use if you'd rather manage your own `conda` environments.
+There are a few different ways to get the appropriate software.
+
+#### Conda / Mamba
+
+All of the software is available in bioconda.
+Create a file called `evironment.yaml`
+and install the required software.
+
+```yaml
+name: base
+channels:
+  - bioconda
+  - conda-forge
+  - biobakery
+dependencies:
+  - python=3.12
+  - metaphlan=4.2.4
+  - humann=4.0.0a1
+  - kneaddata=0.12
+  - procps-ng
+```
+
+Then build it 
+(change to a different environment name if you don't want it
+in your base conda environment) and activate:
+
+```sh
+mamba install -y -n base -f environment.yaml
+mamba activate
+```
+
+The Java within the conda environment is not compatible with nextflow,
+so you need to explicitly set it to use the system java.
+
+```sh
+export JAVA_HOME=/usr/lib/jvm
+export JAVA_CMD=/usr/bin/java
+```
+
+#### Docker / Singularity
+
+If you're comfortable with container workflows,
+we've created a docker/singularity containers
+if you're comfortable with that.
 
 If using docker, open your shell
 (on the VM, you can do this via SSH or in VS code)
@@ -43,37 +82,29 @@ docker pull kescobo/nextflow-biobakery:v4-v0.1
 
 This will take a bit.
 
-Than, tell the shell how to run the container
-
-```sh
-alias kneaddata="docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 kneaddata"
-alias metaphlan="docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 metaphlan"
-alias humann="docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 humann"
-```
-
-These aliases will not persist between sessions.
-If you want to make them permanent,
-either add these aliases to your `~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`,
-or create small executables in somewhere accessible to your `$PATH`.
+The workflow expects certain executables
+to be available on your $PATH.
+The easiest way to deal with this is to
+create small executables in somewhere accessible to your `$PATH`.
 Eg, on the VMs, there is a folder `~/bin` directory.
 Add the following files:
 
 `kneaddata`:
 ```sh
 #!/bin/bash
-docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 kneaddata "$@"
+docker run -it --rm --volume "/vol/volume/":"/vol/volume/" kescobo/nextflow-biobakery:v4-v0.1 kneaddata "$@"
 ```
 
 `metaphlan`:
 ```sh
 #!/bin/bash
-docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 metaphlan "$@"
+docker run -it --rm --volume "/vol/volume/":"/vol/volume/" kescobo/nextflow-biobakery:v4-v0.1 metaphlan "$@"
 ```
 
 `humann`:
 ```sh
 #!/bin/bash
-docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 humann "$@"
+docker run -it --rm --volume "/vol/volume/":"/vol/volume/" kescobo/nextflow-biobakery:v4-v0.1 humann "$@"
 ```
 
 Then make them executable:
@@ -88,12 +119,13 @@ Note the `--volume` arguments in all of the commands above.
 All of the docker commands assume that paths are within the container itself,
 which doesn't have your files and which you can't actually write to.
 
-The setup above mounts your current working directory
+The setup above mounts `/vol/volume` on the vm
 with the same path in the container,
-so if all of your actions take place in your current directory
-or subdirectories, and you use absolute paths, everything will work.
+or subdirectories, and you use absolute paths,
+so if you use absolute paths, everything will work.
 
-If you need other directories (eg your databases are in a shared drive somewhere),
+If you need other directories (eg your databases are in a shared drive somewhere)
+or you're using your home directory,
 be sure to add `--volume` arguments for those paths as well.
 
 ### Databases
@@ -118,13 +150,13 @@ Some of these databases are quite large,
 so be prepared to wait
 
 ```sh
-$ docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 kneaddata_database --download human_genome bowtie2 $PWD/biobakery-databases/kneaddata
+kneaddata_database --download human_genome bowtie2 $PWD/biobakery-databases/kneaddata
 
-$ docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 metaphlan --install --index mpa_vOct22_CHOCOPhlAnSGB_202403 --db_dir $PWD/biobakery-databases/metaphlan
+metaphlan --install --index mpa_vOct22_CHOCOPhlAnSGB_202403 --db_dir $PWD/biobakery-databases/metaphlan
 
-$ docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 humann_database --download chocophlan full biobakery-databases/humann/ --update-config no
-$ docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 humann_databases --download utility_mapping biobakery-databases/humann/ --update-config no
-$ docker run -it --rm --volume "$PWD":"$PWD" kescobo/nextflow-biobakery:v4-v0.1 humann_databases --download uniref uniref90_ec_filtered_diamond biobakery-databases/humann/ --update-config no
+humann_database --download chocophlan full biobakery-databases/humann/ --update-config no
+humann_databases --download utility_mapping biobakery-databases/humann/ --update-config no
+humann_databases --download uniref uniref90_ec_filtered_diamond biobakery-databases/humann/ --update-config no
 ```
 
 
@@ -134,16 +166,16 @@ If you are using the provided VM,
 A couple of steps are needed to make the metaphlan database work.
 
 ```sh
-$ cd /vol/volume/reference_databases/
-$ mkdir metaphlan
-$ mv full_mapping_v4_alpha/mpa_vOct22_CHOCOPhlAnSGB_202403.tar metaphlan/
-$ cd metaphlan
-$ tar xvf mpa_vOct22_CHOCOPhlAnSGB_202403.tar
-$ cd ..
-$ cd mkdir humann
-$ mv chocophlan.v4_alpha humann/chocophlan
-$ mv uniref90_annotated_v4_alpha_ec_filtered humann/uniref
-$ mv full_mapping_v4_alpha humann/utility_mapping
+cd /vol/volume/reference_databases/
+mkdir metaphlan
+mv full_mapping_v4_alpha/mpa_vOct22_CHOCOPhlAnSGB_202403.tar metaphlan/
+cd metaphlan
+tar xvf mpa_vOct22_CHOCOPhlAnSGB_202403.tar
+cd ..
+cd mkdir humann
+mv chocophlan.v4_alpha humann/chocophlan
+mv uniref90_annotated_v4_alpha_ec_filtered humann/uniref
+mv full_mapping_v4_alpha humann/utility_mapping
 ```
 
 ### Workflow
@@ -151,15 +183,15 @@ $ mv full_mapping_v4_alpha humann/utility_mapping
 Download and install the workflow from github
 
 ```sh
-$ cd /vol/volume/sessions
-$ curl -LO https://github.com/BonhamLab/biobakery-nextflow/archive/refs/tags/v0.1.tar.gz
-$ tar xvzf v0.1.tar.gz
-$ cd biobakery-nextflow-0.1/
-$ ls
-README.md             metaphlanstart.nf  single-end-params.yaml  tuftshpc-params.yaml
-aws-params.yaml       nextflow.config    template-params.yaml
-engaging-params.yaml  nf-test.config     test
-main.nf               processes          tests
+cd /vol/volume/sessions
+curl -LO https://github.com/BonhamLab/biobakery-nextflow/archive/refs/tags/v0.2.tar.gz
+tar xvzf v0.2.tar.gz
+cd biobakery-nextflow-0.2/
+ls
+```
+```
+README.md  metaphlanstart.nf  nf-test.config  template-params.yaml  tests
+main.nf    nextflow.config    processes       test
 ```
 
 ## Running the Workflow
@@ -181,10 +213,22 @@ On the VM, this should be:
 readsdir: "/vol/volume/sessions/BonhamLab_biobakery-nextflow/input"
 outdir: "/vol/volume/sessions/BonhamLab_biobakery-nextflow/output"
 human_genome: "/vol/volume/reference_databases/Homo_sapiens_hg39_T2T_Bowtie2_v0.1/"
-trimmomatic_path: "/opt/conda/bin/trimmomatic"
 metaphlan_db: "/vol/volume/reference_databases/metaphlan"
 metaphlan_index: "mpa_vOct22_CHOCOPhlAnSGB_202403"
-humann_db: "/vol/volume/reference_databases/metaphlan"
+humann_db: "/vol/volume/reference_databases/humann"
+```
+
+### Run the workflow
+
+> [!NOTE]
+> Using the included data can take a long time
+> because they're full samples.
+> If you'd like to use smaller samples to see the workflow end-to-end,
+> you can replace the files in `/vol/volume/sessions/BonhamLab_biobakery-nextflow/input`
+> with the files in the `test/rawfastq` subdirectory of the repository.
+
+```sh
+nextflow run main.nf -profile standard -params-file params.yaml
 ```
 
 
